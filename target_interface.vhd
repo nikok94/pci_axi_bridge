@@ -138,13 +138,12 @@ entity target_interface is
 end target_interface;
 
 architecture Behavioral of target_interface is
-    attribute BOX_TYPE : STRING;
-    attribute BOX_TYPE of async_fifo32 : component is "user_black_box";
+
 
     type pci_tr_enc_state_machine is (ready, idle, load_fifo, rd_data_state, send_data, wr_data_state, pci_dscnct_wtht_d, rd_data_cmplt_state, wr_data_cmplt_state, axi_wr_pkt_state);
     signal pci_state, pci_next_state: pci_tr_enc_state_machine;
 
-    type axi_mstr_tr_enc_state_machine is (mstr_edle, single_wr, single_wr_req, single_wr_cmplt, single_rd, single_rd_req, burst_write, burst_write_req);
+    type axi_mstr_tr_enc_state_machine is (mstr_edle, single_wr, single_wr_req, single_wr_cmplt, single_rd, single_rd_req, burst_write, burst_write_req, burst_write_start, burst_write_busy, burst_write_cmplt);
     signal axi_mstr_state, axi_mstr_next_state : axi_mstr_tr_enc_state_machine;
     
     constant C_MAX_BURST_LEN        : integer range 16 to  256      := 256;
@@ -152,15 +151,6 @@ architecture Behavioral of target_interface is
     constant C_LENGTH_WIDTH         : integer := 12;
     signal gnd                      : std_logic:= '0';
     signal vcc                      : std_logic:= '1';
-    signal BAR_1_RD                 : std_logic;
-    signal BAR_1_WR                 : std_logic;
-    signal BAR_2_RD                 : std_logic;
-    signal BAR_2_WR                 : std_logic;
-    signal BAR_3_RD                 : std_logic;
-    signal BAR_3_WR                 : std_logic;
-    signal LOAD_BAR1                : std_logic;
-    signal LOAD_BAR2                : std_logic;
-    signal LOAD_BAR3                : std_logic;
     signal ip2bus_mstrd_req         : std_logic                                           ;
     signal ip2bus_mstwr_req         : std_logic                                           ;
     signal ip2bus_mst_addr          : std_logic_vector(C_M_AXI_ADDR_WIDTH-1 downto 0)     ;
@@ -193,10 +183,9 @@ architecture Behavioral of target_interface is
     signal pci_rst_mst_logic        : std_logic;
     signal master_not_rst           : std_logic;
     signal bus2ip_read_data_reg     : std_logic_vector(C_NATIVE_DATA_WIDTH-1 downto 0 )   ;
+    signal bus2ip_read_data_reg_sync: std_logic_vector(C_NATIVE_DATA_WIDTH-1 downto 0 )   ;
     
     signal ip2bus_mstrd_dst_rdy_n_reg: std_logic                                           ;
-    signal ip2bus_mstwr_d_reg       : std_logic_vector(C_NATIVE_DATA_WIDTH-1 downto 0)    ;
-    signal ip2bus_mstwr_rem_reg     : std_logic_vector((C_NATIVE_DATA_WIDTH/8)-1 downto 0);
     signal ip2bus_mstwr_sof_n_reg   : std_logic                                           ;
     signal ip2bus_mstwr_eof_n_reg   : std_logic                                           ;
     signal ip2bus_mstwr_src_rdy_n_reg: std_logic                                           ;
@@ -208,11 +197,14 @@ architecture Behavioral of target_interface is
     signal ip2bus_mst_type_reg      : std_logic                                           ;
     signal ip2bus_mst_addr_reg      : std_logic_vector(C_M_AXI_ADDR_WIDTH-1 downto 0)     ;
     signal axi_address              : std_logic_vector(C_M_AXI_ADDR_WIDTH-1 downto 0)     ;
+    signal data_burst_length        : std_logic_vector(C_LENGTH_WIDTH-1 downto 0)         ;
     
     signal wr_sel_enc               : std_logic_vector(2 downto 0);
-    signal wr_data_load             : std_logic;
     signal wr_data                  : std_logic_vector(31 downto 0);
     signal wr_data_cbe              : std_logic_vector(3 downto 0);
+    signal s_reg_cbe                : std_logic_vector(3 downto 0);
+    signal s_reg_cbe_sync           : std_logic_vector(3 downto 0);
+    signal s_reg_cbe_sync_d         : std_logic_vector(3 downto 0);
     signal bar_x_rd                 : std_logic;
     signal bar_x_wr                 : std_logic;
     signal axi_read_sync            : std_logic;
@@ -226,7 +218,8 @@ architecture Behavioral of target_interface is
     signal fifo_Din                 : std_logic_vector(36-1 downto 0);
     signal fifo_Dout                : std_logic_vector(36-1 downto 0);
     signal fifo_Full                : std_logic; 
-    signal fifo_Empty               : std_logic; 
+    signal fifo_Empty               : std_logic;
+    signal fifo_Empty_d             : std_logic;
     signal fifo_Almost_full         : std_logic;  
     signal fifo_Almost_empty        : std_logic;  
     signal fifo_Wr_count            : std_logic_vector(8-1 downto 0);
@@ -234,21 +227,25 @@ architecture Behavioral of target_interface is
     signal fifo_wr_en               : std_logic;
     signal push_wr_data_pkt         : std_logic;
     signal push_wr_data_pkt_reg     : std_logic;
-    signal push_wr_data_pkt_sync    : std_logic;
-    signal push_wr_data_pkt_sync_d  : std_logic;
-    signal axi_write                : std_logic;
     signal fifo_rd_en               : std_logic;
-    signal fifo_rd_en_reg           : std_logic;
     signal fifo_wr_ack              : std_logic;
     signal fifo_valid               : std_logic;
     signal fifo_valid_n             : std_logic;
     signal axi_write_singl          : std_logic;
     signal axi_write_burst          : std_logic;
+    signal axi_write_singl_sync     : std_logic;
+    signal axi_write_burst_sync     : std_logic;
     signal bus2ip_mstwr_dst_n       : std_logic;
     signal fifo_Din_reg             : std_logic_vector(36-1 downto 0);
     signal fifo_wr_en_reg           : std_logic;
     signal tr_adio_in_reg           : std_logic_vector(36-1 downto 0);
     signal master_rd_dat_vld        : std_logic;
+    signal master_rd_dat_vld_sinc   : std_logic;
+    signal tr_wrd_hit_en            : std_logic;
+    signal tr_wrd_hit_en_sync       : std_logic;
+    signal axi_address_sync         : std_logic_vector(C_M_AXI_ADDR_WIDTH-1 downto 0);
+    signal mstwr_en                 : std_logic;
+    signal fifo_rd_length      : std_logic_vector(9-1 downto 0);
     
 begin
 master_ist: entity work.axi_master_burst
@@ -378,17 +375,6 @@ pci_rst_master_logic : entity work.flip_flop_synchronizer
       sig_sync    => pci_rst_mst_logic,
       to_clk      => m_axi_aclk
     );
-
-push_wr_data_pkt_sync_proc : entity work.flip_flop_synchronizer
-    generic map(
-      SYNC_STAGES => C_SYNC_STAGES
-    )
-    Port map( 
-      sig         => push_wr_data_pkt,
-      from_clk    => CLK_PCI,
-      sig_sync    => push_wr_data_pkt_sync,
-      to_clk      => m_axi_aclk
-    );
     
 ip2bus_mst_reset <= (not m_axi_aresetn) or pci_rst_mst_logic;
 
@@ -411,29 +397,24 @@ pci_state_sync_proc : process(CLK_PCI)
           TR_S_TERM        <= '1';
           TR_S_ABORT       <= '1';
           TR_ADIO_OUT      <= (others => '0');
-          fifo_Din         <= (others => 'X');
-          fifo_wr_en       <= '0';
+          push_wr_data_pkt <= '0';
         elsif rising_edge(CLK_PCI) then
           pci_state <= pci_next_state;
           TR_S_READY   <= S_READY_reg;
           TR_S_TERM    <= S_TERM_reg;
           TR_S_ABORT   <= '0';
-          fifo_Din     <= fifo_Din_reg  ;
-          fifo_wr_en   <= fifo_wr_en_reg;
-          push_wr_data_pkt <= push_wr_data_pkt_reg;
           TR_ADIO_OUT  <= TR_ADIO_OUT_reg;
+          push_wr_data_pkt <= push_wr_data_pkt_reg;
       end if;
     end process;
 
-pci_state_output_decode : process (pci_next_state, TR_S_DATA_VLD, TR_S_CBE, TR_ADIO_IN, TR_ADIO_IN_reg, bus2ip_mstrd_d)
+pci_state_output_decode : process (pci_state, bus2ip_read_data_reg_sync)
     begin
     S_READY_reg       <= '0';
     S_TERM_reg        <= '0';
     TR_ADIO_OUT_reg   <= (others => '0');
-    push_wr_data_pkt_reg <= '0';
-    fifo_din_reg      <= (others => 'X');
-    fifo_wr_en_reg    <= '0';
-      case (pci_next_state) is
+    push_wr_data_pkt_reg  <= '0';
+      case (pci_state) is
         when ready => 
           S_READY_reg       <= '0';
           S_TERM_reg        <= '0';
@@ -443,27 +424,20 @@ pci_state_output_decode : process (pci_next_state, TR_S_DATA_VLD, TR_S_CBE, TR_A
         when wr_data_state =>           
           S_READY_reg       <= '1';
           S_TERM_reg        <= '0';
-          fifo_din_reg      <= (not TR_S_CBE) & TR_ADIO_IN;
-          fifo_wr_en_reg    <= TR_S_DATA_VLD;
-        --when load_fifo => 
-        --  S_READY_reg       <= '0';
-        --  S_TERM_reg        <= '0';
-        --  fifo_din_reg      <= TR_ADIO_IN_reg;
-        --  fifo_wr_en_reg    <= '1';
         when pci_dscnct_wtht_d => 
           S_READY_reg       <= '0';
           S_TERM_reg        <= '1';
         when rd_data_cmplt_state => 
           S_READY_reg       <= '1';
           S_TERM_reg        <= '1';
-          TR_ADIO_OUT_reg   <= bus2ip_read_data_reg;
+          TR_ADIO_OUT_reg   <= bus2ip_read_data_reg_sync;
         when wr_data_cmplt_state => 
           S_READY_reg       <= '1';
           S_TERM_reg        <= '1';
+          push_wr_data_pkt_reg  <= '1';
         when axi_wr_pkt_state => 
           S_READY_reg       <= '0';
           S_TERM_reg        <= '1';
-          push_wr_data_pkt_reg <= '1';
         when others =>
           S_READY_reg       <= '0';
           S_TERM_reg        <= '1';
@@ -495,16 +469,11 @@ pci_next_state_decode : process (pci_state, master_not_rst, bar_x_rd, bar_x_wr, 
               pci_next_state <= ready;
             end if;
           when wr_data_state =>
-        --    if (TR_S_DATA_VLD = '1') and (fifo_wr_ack = '0') then
-        --      pci_next_state <= load_fifo;
-        --    els
+
             if (fifo_Almost_full = '1') or (TR_S_DATA = '0') then 
               pci_next_state <= wr_data_cmplt_state;
             end if;
-         -- when load_fifo => 
-         --   if (fifo_wr_ack = '1') then
-         --     pci_next_state <= wr_data_state;
-         --   end if;
+
           when wr_data_cmplt_state =>
               pci_next_state <= axi_wr_pkt_state;
           when axi_wr_pkt_state => 
@@ -524,49 +493,41 @@ TR_ADIO_IN_reg_proc : process(CLK_PCI)
       end if;
     end if;
   end process;
+  
 -- Decoding Target Transactions
 target_rd_wr_bar_decodes_proc   : process(CLK_PCI)
   begin
       if rising_edge(CLK_PCI) then
         if (RST_PCI = '1') then
-          BAR_1_RD <= '0';
-          BAR_1_WR <= '0';
-          BAR_2_RD <= '0';
-          BAR_2_WR <= '0';
-          BAR_3_RD <= '0';
-          BAR_3_WR <= '0';
+          bar_x_rd <= '0';
+          bar_x_wr <= '0';
         else
           
-          if (TR_BASE_HIT(0) = '1') then
-            BAR_1_RD <= (not TR_S_WRDN);
-            BAR_1_WR <= TR_S_WRDN;
+          if (tr_wrd_hit_en = '1') then
+            bar_x_rd <= (not TR_S_WRDN);
+            s_reg_cbe <= (not TR_S_CBE);
+            bar_x_wr <= TR_S_WRDN;
           elsif (TR_S_DATA = '0') then
-            BAR_1_RD <= '0';
-            BAR_1_WR <= '0';
+            bar_x_rd <= '0';
+            bar_x_wr <= '0';
           end if;
           
-          if (TR_BASE_HIT(1) = '1') then
-            BAR_2_RD <= (not TR_S_WRDN);
-            BAR_2_WR <= TR_S_WRDN;
-          elsif (TR_S_DATA = '0') then
-            BAR_2_RD <= '0';
-            BAR_2_WR <= '0';
-            
-          if (TR_BASE_HIT(2) = '1') then
-            BAR_3_RD <= (not TR_S_WRDN);
-            BAR_3_WR <= TR_S_WRDN;
-          elsif (TR_S_DATA = '0') then
-            BAR_3_RD <= '0';
-            BAR_3_WR <= '0';
-          end if;
-          
-          end if;
         end if;
       end if;
   end process;
+  
+cbe_sync_proc : process(m_axi_aclk)
+  begin
+    if rising_edge(m_axi_aclk) then
+      s_reg_cbe_sync <= s_reg_cbe;
+      s_reg_cbe_sync_d <= s_reg_cbe_sync;
+    end if;
+  end process;
+  
 
-    bar_x_wr <= BAR_1_WR or BAR_2_WR or BAR_3_WR;
-    bar_x_rd <= BAR_1_RD or BAR_3_RD or BAR_3_RD;
+tr_wrd_hit_en <= TR_BASE_HIT(0) or TR_BASE_HIT(1) or TR_BASE_HIT(2);
+
+
 
 adr_dec_proc : process(CLK_PCI)
   begin
@@ -602,6 +563,9 @@ fifo_inst : entity work.async_fifo32
     wr_data_count => fifo_Wr_count
   );
 
+  fifo_wr_en <= bar_x_wr and TR_S_DATA_VLD;
+  fifo_din   <= (not TR_S_CBE) & TR_ADIO_IN;
+
 axi_rd_en_sync : entity work.flip_flop_synchronizer
     generic map(
       SYNC_STAGES => C_SYNC_STAGES
@@ -613,6 +577,13 @@ axi_rd_en_sync : entity work.flip_flop_synchronizer
       to_clk      => m_axi_aclk
     );
 
+axi_read_gen_proc : process(m_axi_aclk)
+    begin
+      if rising_edge(m_axi_aclk) then
+        axi_read_d <= axi_read_sync;
+        axi_read <= (not axi_read_d) and axi_read_sync;
+      end if;
+    end process;
 
 axi_cmplt_sync: entity work.ToggleSynchronizer
     generic map( 
@@ -637,31 +608,46 @@ axi_error_sync_proc: entity work.ToggleSynchronizer
       to_clk    => CLK_PCI
     );
 
-push_wr_data_pkt_sync_d_proc : process(m_axi_aclk)
-    begin
-      if rising_edge(m_axi_aclk) then
-        push_wr_data_pkt_sync_d <= push_wr_data_pkt_sync;
-        axi_read_d <= axi_read_sync;
-        axi_read <= axi_read_sync and not (axi_read_d);
-        axi_write <= push_wr_data_pkt_sync and not (push_wr_data_pkt_sync_d);
-      end if;
-    end process;
+axi_write_singl_sync_proc : entity work.ToggleSynchronizer
+    generic map( 
+        SYNC_STAGES => C_SYNC_STAGES
+        )
+    Port map(
+      sign      => axi_write_singl,
+      from_clk  => CLK_PCI,
+      sign_sync => axi_write_singl_sync,
+      to_clk    => m_axi_aclk
+    );
+    
+axi_write_burst_sync_proc : entity work.ToggleSynchronizer
+    generic map( 
+        SYNC_STAGES => C_SYNC_STAGES
+        )
+    Port map(
+      sign      => axi_write_burst,
+      from_clk  => CLK_PCI,
+      sign_sync => axi_write_burst_sync,
+      to_clk    => m_axi_aclk
+    );
 
 ------------------------------------------------------------------------------------------
 -- IPIC Write Data Interface Signals
 ------------------------------------------------------------------------------------------
-axi_write_singl <= '1' when (axi_write = '1') and (fifo_rd_count = 0) else '0';
-axi_write_burst <= '1' when (axi_write = '1') and (fifo_rd_count = 1) else '0';
+axi_write_singl <= '1' when (push_wr_data_pkt = '1') and (fifo_wr_count = 1) else '0';
+axi_write_burst <= '1' when (push_wr_data_pkt = '1') and (fifo_wr_count > 1) else '0';
+
 fifo_valid_n <= not fifo_valid;
-bus2ip_mstwr_dst_n <= ip2bus_mstwr_src_rdy_n_reg or bus2ip_mstwr_dst_rdy_n;
-fifo_rd_en   <= not bus2ip_mstwr_dst_rdy_n;
+bus2ip_mstwr_dst_n <= ip2bus_mstwr_src_rdy_n or bus2ip_mstwr_dst_rdy_n;
+
+fifo_rd_en                <= not bus2ip_mstwr_dst_n;
+ip2bus_mstwr_d <= fifo_Dout( 31 downto 0);
+ip2bus_mstwr_rem <= (not fifo_Dout(35 downto 32));
+
 
 axi_mstr_state_sync_proc : process(m_axi_aclk)
     begin
       if (m_axi_aresetn = '0') then 
           axi_mstr_state            <= mstr_edle;
-          ip2bus_mstwr_rem          <= (others => 'Z');
-          ip2bus_mstwr_d            <= (others => 'Z');
           ip2bus_mst_be             <= (others => 'Z');
           ip2bus_mst_addr           <= (others => 'Z');
           ip2bus_mst_length         <= (others => 'Z');
@@ -676,9 +662,7 @@ axi_mstr_state_sync_proc : process(m_axi_aclk)
         elsif rising_edge(m_axi_aclk) then
           axi_mstr_state            <= axi_mstr_next_state;
           ip2bus_mst_length         <= ip2bus_mst_length_reg;
-          ip2bus_mstwr_rem          <= ip2bus_mstwr_rem_reg      ;
           ip2bus_mst_addr           <= ip2bus_mst_addr_reg       ;
-          ip2bus_mstwr_d            <= ip2bus_mstwr_d_reg        ;
           ip2bus_mst_be             <= ip2bus_mst_be_reg         ;
           ip2bus_mstwr_sof_n        <= ip2bus_mstwr_sof_n_reg    ;
           ip2bus_mstwr_eof_n        <= ip2bus_mstwr_eof_n_reg    ;
@@ -691,11 +675,9 @@ axi_mstr_state_sync_proc : process(m_axi_aclk)
       end if;
     end process;
 
-    
-axi_mstr_state_output_decode : process(axi_mstr_next_state)
+     
+axi_mstr_state_output_decode : process(axi_mstr_next_state, axi_address_sync, fifo_Dout, fifo_valid_n, fifo_rd_length, fifo_Almost_empty, s_reg_cbe_sync_d)
     begin
-      ip2bus_mstwr_rem_reg      <= (others => 'Z');
-      ip2bus_mstwr_d_reg        <= (others => 'Z');
       ip2bus_mst_be_reg         <= (others => 'Z');
       ip2bus_mst_addr_reg       <= (others => 'Z');
       ip2bus_mst_length_reg     <= (others => 'Z');
@@ -709,8 +691,6 @@ axi_mstr_state_output_decode : process(axi_mstr_next_state)
       ip2bus_mstrd_dst_rdy_n_reg <= '1';
         case (axi_mstr_next_state) is
           when mstr_edle => 
-            ip2bus_mstwr_rem_reg      <= (others => 'Z');
-            ip2bus_mstwr_d_reg        <= (others => 'Z');
             ip2bus_mst_be_reg         <= (others => 'Z');
             ip2bus_mst_addr_reg       <= (others => 'Z');
             ip2bus_mst_length_reg     <= (others => 'Z');
@@ -720,21 +700,16 @@ axi_mstr_state_output_decode : process(axi_mstr_next_state)
             ip2bus_mstwr_src_dsc_n_reg<= '1';
             ip2bus_mstwr_req_reg      <= '0';
             ip2bus_mstrd_req_reg      <= '0';
-            ip2bus_mst_type_reg       <= '0';
             ip2bus_mstrd_dst_rdy_n_reg <= '1';
           when single_wr_req => 
             ip2bus_mstwr_req_reg <= '1';
-            ip2bus_mst_addr_reg <= axi_address;
+            ip2bus_mst_addr_reg <= axi_address_sync;
             ip2bus_mst_be_reg <= fifo_Dout( 35 downto 32);
             ip2bus_mst_length_reg <= (others => 'X');
-            ip2bus_mstwr_d_reg <= fifo_Dout( 31 downto 0);
-            ip2bus_mstwr_rem_reg <= (others => '0');
             ip2bus_mstwr_sof_n_reg    <= '0';
             ip2bus_mstwr_eof_n_reg    <= '0';
             ip2bus_mstwr_src_rdy_n_reg<= '0';
           when single_wr => 
-            ip2bus_mstwr_d_reg <= fifo_Dout( 31 downto 0);
-            ip2bus_mstwr_rem_reg <= (others => '0');
             ip2bus_mstwr_sof_n_reg    <= '0';
             ip2bus_mstwr_eof_n_reg    <= '0';
             ip2bus_mstwr_src_rdy_n_reg<= fifo_valid_n;
@@ -744,27 +719,43 @@ axi_mstr_state_output_decode : process(axi_mstr_next_state)
             ip2bus_mstwr_src_rdy_n_reg<= '1';
           when single_rd_req =>
             ip2bus_mstrd_req_reg <= '1';
-            ip2bus_mst_addr_reg <= axi_address;
-            ip2bus_mst_be_reg <= not TR_S_CBE;
+            ip2bus_mst_addr_reg <= axi_address_sync;
+            ip2bus_mst_be_reg <= s_reg_cbe_sync_d;
             ip2bus_mst_length_reg <= (others => 'X');
             ip2bus_mstrd_dst_rdy_n_reg <= '0';
           when single_rd => 
             ip2bus_mstrd_dst_rdy_n_reg <= '0';
+          when burst_write_req => 
+            ip2bus_mstwr_req_reg <= '1';
+            ip2bus_mst_addr_reg <= axi_address_sync;
+            ip2bus_mst_length_reg <= '0' & fifo_rd_length & b"00";
+            ip2bus_mstwr_sof_n_reg    <= '0';
+            ip2bus_mstwr_src_rdy_n_reg<= fifo_valid_n;
+            ip2bus_mst_type_reg <= '1';
+          when burst_write_busy => 
+            ip2bus_mstwr_src_rdy_n_reg<= fifo_valid_n;
+          when burst_write_start => 
+            ip2bus_mstwr_sof_n_reg    <= '0';
+            ip2bus_mstwr_eof_n_reg    <= (not fifo_Almost_empty);
+            ip2bus_mstwr_src_rdy_n_reg<= fifo_valid_n;
+          when burst_write_cmplt => 
+            ip2bus_mstwr_eof_n_reg <= '0';
+            ip2bus_mstwr_src_rdy_n_reg <= fifo_valid_n;
           when others =>
             null;
         end case;
     end process;
 
-axi_mstr_next_state_decode : process(axi_mstr_state, axi_read, axi_write_singl, axi_write_burst, bus2ip_mst_cmdack, bus2ip_mstwr_dst_rdy_n, bus2ip_mstrd_src_rdy_n, bus2ip_mst_cmplt)
+axi_mstr_next_state_decode : process(axi_mstr_state, axi_read, axi_write_singl_sync, axi_write_burst_sync, bus2ip_mst_cmdack, bus2ip_mstwr_dst_n, bus2ip_mstrd_src_rdy_n, bus2ip_mst_cmplt, fifo_almost_empty)
     begin
       axi_mstr_next_state <= axi_mstr_state;
         case (axi_mstr_state) is
           when mstr_edle => 
             if (axi_read = '1') then 
               axi_mstr_next_state <= single_rd_req;
-            elsif (axi_write_singl = '1') and (fifo_valid = '1') then 
+            elsif (axi_write_singl_sync = '1') then 
               axi_mstr_next_state <= single_wr_req;
-            elsif (axi_write_burst = '1') then
+            elsif (axi_write_burst_sync = '1') then
               axi_mstr_next_state <= burst_write_req;
             end if;
           when single_wr_req => 
@@ -772,7 +763,7 @@ axi_mstr_next_state_decode : process(axi_mstr_state, axi_read, axi_write_singl, 
               axi_mstr_next_state <= single_wr;
             end if;
           when single_wr => 
-            if (bus2ip_mstwr_dst_rdy_n = '0') then 
+            if (bus2ip_mstwr_dst_n = '0') then 
               axi_mstr_next_state <= single_wr_cmplt;
             end if;
           when single_wr_cmplt => 
@@ -787,24 +778,85 @@ axi_mstr_next_state_decode : process(axi_mstr_state, axi_read, axi_write_singl, 
             if (bus2ip_mstrd_src_rdy_n = '0') then
               axi_mstr_next_state <= mstr_edle;
             end if;
+          when burst_write_req => 
+            if (bus2ip_mst_cmdack = '1') then 
+              axi_mstr_next_state <= burst_write_start;
+            end if;
+          when burst_write_start => 
+            if (bus2ip_mstwr_dst_n = '0') then 
+              axi_mstr_next_state <= burst_write_busy;
+            end if;
+          when burst_write_busy => 
+            if (fifo_almost_empty = '1') then
+              axi_mstr_next_state <= burst_write_cmplt;
+            end if;
+          when burst_write_cmplt => 
+            if bus2ip_mstwr_dst_n = '0' then
+              axi_mstr_next_state <= mstr_edle;
+            end if;
           when others =>
              axi_mstr_next_state <= mstr_edle;
         end case;
     end process;
 
-    master_rd_dat_vld <= (not bus2ip_mstrd_src_rdy_n) and (not ip2bus_mstrd_dst_rdy_n_reg);
-    
+master_rd_dat_vld <= not (bus2ip_mstrd_src_rdy_n or ip2bus_mstrd_dst_rdy_n);
+
+fifo_rd_length <= (('0' & fifo_rd_count) + b"000000010");
+
+master_rd_dat_vld_sync_proc: entity work.ToggleSynchronizer
+    generic map( 
+        SYNC_STAGES => C_SYNC_STAGES
+        )
+    Port map(
+      sign      => master_rd_dat_vld,
+      from_clk  => m_axi_aclk,
+      sign_sync => master_rd_dat_vld_sinc,
+      to_clk    => CLK_PCI
+    );
+
+tr_wrd_hit_en_sync_proc : entity work.ToggleSynchronizer
+    generic map( 
+        SYNC_STAGES => C_SYNC_STAGES
+        )
+    Port map(
+      sign      => tr_wrd_hit_en,
+      from_clk  => CLK_PCI,
+      sign_sync => tr_wrd_hit_en_sync,
+      to_clk    => m_axi_aclk
+    );
+
+axi_address_sync_proc : process(m_axi_aclk)
+    begin
+      if rising_edge(m_axi_aclk) then
+        if (m_axi_aresetn = '0') then
+          axi_address_sync <= (others => '0');
+        elsif tr_wrd_hit_en_sync = '1' then 
+          axi_address_sync <= axi_address;
+        end if;
+      end if;
+    end process;
+
 read_data_reg_proc : process(m_axi_aclk)
     begin
       if rising_edge(m_axi_aclk) then
         if (m_axi_aresetn = '0') then
-          bus2ip_read_data_reg <= (others => 'X');
+          bus2ip_read_data_reg <= (others => '0');
         elsif master_rd_dat_vld ='1' then
           bus2ip_read_data_reg <= bus2ip_mstrd_d;
         end if;
       end if;
     end process;
-    
+
+read_data_reg_sync_proc : process(CLK_PCI, RST_PCI)
+    begin 
+      if (RST_PCI = '1') then
+        bus2ip_read_data_reg_sync <= (others => '0');
+      elsif rising_edge(CLK_PCI) then
+        if (master_rd_dat_vld_sinc = '1') and (bar_x_rd = '1') then
+        bus2ip_read_data_reg_sync <= bus2ip_read_data_reg;
+        end if;
+      end if;
+    end process;
 
 
 
