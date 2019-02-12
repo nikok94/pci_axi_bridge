@@ -241,6 +241,8 @@ PORT RST_I    = "", DIR = I, SIGIS = RST
 PORT CLK_I    = "", DIR = I, SIGIS = CLK
 PORT IDSEL_I  = "", DIR = I               
 
+PORT INRT_N = "", DIR = I, SIGIS = INTERRUPT, SENSITIVITY = LEVEL_LOW
+
 PORT AD_IO_O = "", DIR = O, VEC = [31:0]
 PORT AD_IO_I = "", DIR = I, VEC = [31:0]
 PORT AD_IO_T = "", DIR = O, VEC = [31:0]

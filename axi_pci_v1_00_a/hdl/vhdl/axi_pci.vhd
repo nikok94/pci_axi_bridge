@@ -130,7 +130,7 @@ entity axi_pci is
       DEVSEL_IO_O                     : out std_logic;
       DEVSEL_IO_I                     : in  std_logic;
       DEVSEL_IO_T                     : out std_logic;
-      IDSEL_I                         : in    std_logic;
+      IDSEL_I                         : in  std_logic;
 --      PERR_IO                         : inout std_logic;
       PERR_IO_O                       : out std_logic;
       PERR_IO_I                       : in  std_logic;
@@ -139,12 +139,12 @@ entity axi_pci is
       SERR_IO_O                       : out std_logic;
       SERR_IO_I                       : in  std_logic;
       SERR_IO_T                       : out std_logic;
-      INT_O                           : out   std_logic;
-      REQ_O                           : out   std_logic;
-      GNT_I                           : in    std_logic;
-      RST_I                           : in    std_logic;
-      CLK_I                           : in    std_logic;
-    
+      INT_O                           : out std_logic;
+      REQ_O                           : out std_logic;
+      GNT_I                           : in  std_logic;
+      RST_I                           : in  std_logic;
+      CLK_I                           : in  std_logic;
+      INRT_N                          : in  std_logic;
     ------------------------------------------------------------------------
     -- Axi interface signals
     ------------------------------------------------------------------------
@@ -295,7 +295,6 @@ architecture Behavioral of axi_pci is
     signal pci_lc_serrq_n           : std_logic;
     signal pci_lc_backoff           : std_logic;
     signal pci_lc_s_data            : std_logic;
-    signal INT_N_reg                : std_logic;
     signal PME_N_reg                : std_logic;
     signal ITR_M_READY              : std_logic;
     signal ITR_M_CBE                : std_logic_vector(3 downto 0);
@@ -405,7 +404,7 @@ pci_lc_ist : entity axi_pci_v1_00_a.PCI_LC
     B_BUSY        => pci_lc_b_busy  ,
     S_DATA        => pci_lc_s_data,
     BACKOFF       => pci_lc_backoff,
-    INT_N         => INT_N_reg,
+    INT_N         => INRT_N,
     PME_N         => PME_N_reg,
     PERRQ_N       => pci_lc_perrq_n,
     SERRQ_N       => pci_lc_serrq_n,
@@ -634,11 +633,9 @@ control_block_inst:    entity axi_pci_v1_00_a.control_block
   process(pci_lc_clk_out, pci_lc_rst_out)
   begin
     if (pci_lc_rst_out='1') then
-      INT_N_reg     <= '0';
       PME_N_reg     <= '0';
 
     elsif rising_edge(pci_lc_clk_out) then
-      INT_N_reg     <= '1';
       PME_N_reg     <= '1';
 
     end if;

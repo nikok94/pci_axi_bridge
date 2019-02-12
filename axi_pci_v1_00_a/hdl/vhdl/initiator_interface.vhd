@@ -234,8 +234,10 @@ END component a_fifo_stream;
     signal pci_adress            : std_logic_vector(31 downto 0);
     signal axi2pcibar0_adress    : std_logic_vector(31 downto 0);
     signal axi2pcibar1_adress    : std_logic_vector(31 downto 0);
-    signal AD_O_data             : std_logic_vector(31 downto 0);
-    signal m_cbe                 : std_logic_vector(3 downto 0);
+    signal ADO_O                 : std_logic_vector(31 downto 0);
+    signal ADO                   : std_logic_vector(31 downto 0);
+    
+--    signal m_cbe                 : std_logic_vector(3 downto 0);
     signal command               : std_logic_vector(3 downto 0);
     signal axi_bar0_en           : std_logic;
     signal axi_bar1_en           : std_logic;
@@ -248,6 +250,10 @@ END component a_fifo_stream;
     signal addr_err_pass_sync    : std_logic;
     signal fifo_en               : std_logic;
     signal fifo_rstn             : std_logic;
+    signal initiator_fsm_busy    : std_logic;
+    signal ITR_M_WRDN_O          : std_logic;
+    signal ITR_M_READY_O         : std_logic;
+    signal ITR_COMPLETE_O        : std_logic;
     
     
 
@@ -265,8 +271,26 @@ axi_barX_valid <= (axi_bar0_valid or axi_bar1_valid) and wr_fifo_m_axis_tvalid;
 wr_fifo_m_axis_tready <= ITR_M_SRC_EN;
 last_word_fifo_rd <= wr_fifo_m_axis_tlast and ITR_M_SRC_EN;
 
-ITR_ADIO_OUT <= pci_adress when (ITR_M_ADDR_N = '0') else AD_O_data;
-ITR_M_CBE <= b"011"&(not axisl2pcinc_rnw) when (ITR_M_ADDR_N = '0') else (m_cbe);
+ITR_ADIO_OUT <= pci_adress when (ITR_M_ADDR_N = '0') else 
+                ADO  when (ITR_M_DATA = '1') else 
+               (others => 'Z');
+ITR_M_CBE <= b"011"&(not axisl2pcinc_rnw) when (ITR_M_ADDR_N = '0') else (others => '0');
+
+--
+--initiator_fsm_busy
+--INITIATOR_BUSY_PROC : 
+--  process (CLK_PCI)
+--  begin
+--    if (RST_PCI = '1') then
+--      INITIATOR_BUSY <= '0';
+--    elsif rising_edge(CLK_PCI) then
+--      if (initiator_fsm_busy = '1') then
+--        INITIATOR_BUSY <= '1';
+--      elsif ITR_M_DATA = '0' then
+--        INITIATOR_BUSY <= '0';
+--      end if;
+--    end if;
+--  end process;
 
 process(CLK_PCI)
   begin
@@ -367,24 +391,31 @@ FSM_INCTR_SYNC_PROC : process(CLK_PCI, RST_PCI)
   begin
     if (RST_PCI = '1') then
       intr_state <= IDLE_S;
+      ITR_M_WRDN <= '0';
+      ITR_M_READY <= '0';
+      ITR_COMPLETE <= '0';
+      ADO <= (others => '0');
     elsif rising_edge(CLK_PCI) then
-      intr_state <= intr_next_state;
+      intr_state    <= intr_next_state;
+      ITR_M_WRDN    <= ITR_M_WRDN_O  ;
+      ITR_M_READY   <= ITR_M_READY_O ;
+      ITR_COMPLETE  <= ITR_COMPLETE_O;
+      ADO           <= ADO_O;
     end if;
   end process;
 
-FSM_INCTR_OUT_ENCODER_PROC : process(intr_state, wr_fifo_m_axis_tvalid, wr_fifo_m_axis_tlast, wr_fifo_m_axis_tstrb, wr_fifo_m_axis_tdata)
+FSM_INCTR_OUT_ENCODER_PROC : process(intr_state, wr_fifo_m_axis_tvalid, wr_fifo_m_axis_tlast, wr_fifo_m_axis_tdata)
     begin
       ITR_REQUEST <= '0';
       ITR_REQUESTHOLD <= '0';
       pci_start_ack <= '0'; 
       pci_end_ack <= '0';
-      ITR_M_WRDN <= '0';
-      ITR_M_READY <= '0';
-      ITR_COMPLETE <= '0';
-      m_cbe <= (others => 'Z');
-      AD_O_data <= (others => 'Z');
+      ADO_O <= (others => 'Z');
       addr_err_pass <= '0';
       INITIATOR_BUSY <= '1';
+      ITR_M_WRDN_O <= '0';
+      ITR_M_READY_O<= '0';
+      ITR_COMPLETE_O<= '0';
         case intr_state is
           when IDLE_S => 
             INITIATOR_BUSY <= '0';
@@ -394,18 +425,18 @@ FSM_INCTR_OUT_ENCODER_PROC : process(intr_state, wr_fifo_m_axis_tvalid, wr_fifo_
           when DONE_S => 
             pci_end_ack <= '1';
           when WRITE_S =>
-            ITR_M_WRDN <= '1';
-            ITR_M_READY <= wr_fifo_m_axis_tvalid;
-            ITR_COMPLETE <= wr_fifo_m_axis_tlast;
-            m_cbe <= not wr_fifo_m_axis_tstrb(3 downto 0);
-            AD_O_data <= wr_fifo_m_axis_tdata(31 downto 0);
+            ITR_M_WRDN_O <= '1';
+            ITR_M_READY_O <= wr_fifo_m_axis_tvalid;
+            ITR_COMPLETE_O <= wr_fifo_m_axis_tlast;
+            ADO_O <= wr_fifo_m_axis_tdata(31 downto 0);
           when ADDR_ERROR =>
             addr_err_pass <= '1';
           when others =>
+            INITIATOR_BUSY <= '0';
         end case;
     end process;
 
-FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, retry, fatal, m_data_fell, last_word_fifo_rd, wr_fifo_m_axis_tvalid, axi_barX_valid)
+FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, retry, fatal, m_data_fell, ITR_M_DATA, wr_fifo_m_axis_tvalid, axi_barX_valid)
     begin
       intr_next_state <= intr_state;
         case (intr_state) is
@@ -440,7 +471,7 @@ FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, ret
                 intr_next_state <= DEAD_S;
               elsif (retry = '1') then
                 intr_next_state <= RETRY_S;
-              elsif (last_word_fifo_rd = '1') then 
+              elsif (ITR_M_DATA = '0') then 
                 intr_next_state <= DONE_S;
               end if;
             end if;
