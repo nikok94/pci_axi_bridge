@@ -244,6 +244,7 @@ END component a_fifo_stream;
     signal axi_barX_valid        : std_logic;
     signal addr_err_pass         : std_logic;
     signal addr_val_ack          : std_logic;
+    signal pci_fsm_busy          : std_logic;
     
     signal addr_err_pass_sync    : std_logic;
     signal fifo_en               : std_logic;
@@ -289,8 +290,7 @@ process(CLK_PCI, RST_PCI)
       m_dataq <= ITR_M_DATA;
     end if;
   end process;
-  m_data_fell <= (not m_dataq) and ITR_M_DATA;
-
+  m_data_fell <= (not ITR_M_DATA) and m_dataq;
 -- inputs to the initiatior state machine
 watch_status : process(CLK_PCI, RST_PCI)
   begin
@@ -365,6 +365,20 @@ addr_err_pass_sync_proc : entity work.ToggleSynchronizer
   
 -- initiator state machine
 
+--INITIATOR_BUSY_PROC :
+--  process (CLK_PCI, RST_PCI)
+--  begin
+--    if (RST_PCI = '1') then
+--      INITIATOR_BUSY <= '0';
+--    elsif rising_edge(CLK_PCI) then
+--      if (pci_fsm_busy = '1') then
+--        INITIATOR_BUSY <= '1';
+--      elsif (ITR_M_DATA = '0') then
+--        INITIATOR_BUSY <= '0';
+--      end if;
+--    end if;
+--  end process;
+
 FSM_INCTR_SYNC_PROC : process(CLK_PCI, RST_PCI)
   begin
     if (RST_PCI = '1') then
@@ -407,7 +421,7 @@ FSM_INCTR_OUT_ENCODER_PROC : process(intr_state, wr_fifo_m_axis_tvalid, wr_fifo_
         end case;
     end process;
 
-FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, retry, fatal, m_data_fell, last_word_fifo_rd, wr_fifo_m_axis_tvalid, axi_barX_valid)
+FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, retry, fatal, m_data_fell, wr_fifo_m_axis_tvalid, axi_barX_valid)
     begin
       intr_next_state <= intr_state;
         case (intr_state) is
@@ -442,7 +456,7 @@ FSM_INCTR_NEXTSTATE_DECOD_PROC : process(intr_state, start, axisl2pcinc_rnw, ret
                 intr_next_state <= DEAD_S;
               elsif (retry = '1') then
                 intr_next_state <= RETRY_S;
-              elsif (last_word_fifo_rd = '1') then 
+              else
                 intr_next_state <= DONE_S;
               end if;
             end if;
