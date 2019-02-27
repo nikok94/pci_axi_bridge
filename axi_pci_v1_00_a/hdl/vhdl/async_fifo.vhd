@@ -26,8 +26,8 @@
 --    All rights reserved.                                                    --
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
--- You must compile the wrapper file async_fifo32.vhd when simulating
--- the core, async_fifo32. When compiling the wrapper file, be sure to
+-- You must compile the wrapper file async_fifo.vhd when simulating
+-- the core, async_fifo. When compiling the wrapper file, be sure to
 -- reference the XilinxCoreLib VHDL simulation library. For detailed
 -- instructions, please refer to the "CORE Generator Help".
 
@@ -37,38 +37,38 @@
 
 LIBRARY ieee;
 USE ieee.std_logic_1164.ALL;
-
 library axi_pci_v1_00_a_proc_common_v3_00_a;
 use axi_pci_v1_00_a_proc_common_v3_00_a.proc_common_pkg.all;
 use axi_pci_v1_00_a_proc_common_v3_00_a.coregen_comp_defs.all;
 use axi_pci_v1_00_a_proc_common_v3_00_a.family_support.all;
 
+--library axi_pci_v1_00_a;
+--use axi_pci_v1_00_a.fifo_generator_v9_3;
 -- synopsys translate_off
 library XilinxCoreLib;
 --use XilinxCoreLib.all;
 -- synopsys translate_on
-ENTITY async_fifo32 IS
+ENTITY async_fifo IS
   GENERIC (
-    c_fifo_depth : integer := 256;
-    c_data_width : integer := 36
+    c_fifo_depth : integer := 512;
+    c_data_width : integer := 32
   );
   PORT (
     rst : IN STD_LOGIC;
     wr_clk : IN STD_LOGIC;
     rd_clk : IN STD_LOGIC;
-    din : IN STD_LOGIC_VECTOR(c_data_width-1 DOWNTO 0);
+    din : IN STD_LOGIC_VECTOR(31 DOWNTO 0);
     wr_en : IN STD_LOGIC;
     rd_en : IN STD_LOGIC;
-    dout : OUT STD_LOGIC_VECTOR(c_data_width-1 DOWNTO 0);
+    dout : OUT STD_LOGIC_VECTOR(31 DOWNTO 0);
     full : OUT STD_LOGIC;
-    almost_full : OUT STD_LOGIC;
     empty : OUT STD_LOGIC;
     almost_empty : OUT STD_LOGIC;
     valid : OUT STD_LOGIC
   );
-END async_fifo32;
+END async_fifo;
 
-ARCHITECTURE async_fifo32_a OF async_fifo32 IS
+ARCHITECTURE async_fifo32_a OF async_fifo IS
 
 BEGIN
 I_ASYNC_FIFO_BRAM : fifo_generator_v9_3
@@ -121,7 +121,7 @@ I_ASYNC_FIFO_BRAM : fifo_generator_v9_3
       c_family => "spartan6",
       c_full_flags_rst_val => 1,
       c_has_almost_empty => 1,
-      c_has_almost_full => 1,
+      c_has_almost_full => 0,
       c_has_axi_aruser => 0,
       c_has_axi_awuser => 0,
       c_has_axi_buser => 0,
@@ -289,7 +289,7 @@ I_ASYNC_FIFO_BRAM : fifo_generator_v9_3
 
      DOUT                      =>  Dout,                 -- : OUT std_logic_vector(C_DOUT_WIDTH-1 DOWNTO 0);
      FULL                      =>  Full,                 -- : OUT std_logic;
-     ALMOST_FULL               =>  ALMOST_FULL,          -- : OUT std_logic;
+     ALMOST_FULL               =>  open,          -- : OUT std_logic;
      WR_ACK                    =>  open,               -- : OUT std_logic;
      OVERFLOW                  =>  open,               -- : OUT std_logic;
      EMPTY                     =>  Empty,                -- : OUT std_logic;

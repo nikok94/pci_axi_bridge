@@ -41,6 +41,10 @@ USE ieee.std_logic_1164.ALL;
 LIBRARY XilinxCoreLib;
 -- synthesis translate_on
 ENTITY a_fifo_stream IS
+   generic (
+     c_data_width  : integer := 64;
+     c_depth_axis  : integer := 4096
+     );
   PORT (
     m_aclk : IN STD_LOGIC;
     s_aclk : IN STD_LOGIC;

@@ -59,15 +59,17 @@ entity axi_pci is
       C_M_AXI_ADDR_WIDTH                : integer range 32 to 32        := 32;
       C_M_AXI_DATA_WIDTH                : integer range 32 to 256       := 32;
       C_FAMILY                          : string := "virtex6";
-      C_S_AXI_ID_WIDTH                  : integer := 4;
-      C_S_AXI_ADDR_WIDTH                : integer range 32 to 32        := 32;
-      C_S_AXI_DATA_WIDTH                : integer range 32 to 32       := 32;
-      C_AXIBAR_0                        : std_logic_vector(31 downto 0):= x"ffffffff";
-      C_AXIBAR_1                        : std_logic_vector(31 downto 0):= x"ffffffff";
-      C_AXIBAR_HIGHADDR_0               : std_logic_vector(31 downto 0):= x"00000000";
-      C_AXIBAR_HIGHADDR_1               : std_logic_vector(31 downto 0):= x"00000000";
-      C_AXIBAR2PCIBAR_0                 : std_logic_vector(31 downto 0):= x"12340000";
-      C_AXIBAR2PCIBAR_1                 : std_logic_vector(31 downto 0):= x"56780000";
+      C_FIFO_DEPTH                      : integer := 16;
+      C_SYNC_STAGES                     : integer:= 2;
+      --C_S_AXI_ID_WIDTH                  : integer := 4;
+      --C_S_AXI_ADDR_WIDTH                : integer range 32 to 32        := 32;
+      --C_S_AXI_DATA_WIDTH                : integer range 32 to 32       := 32;
+      --C_AXIBAR_0                        : std_logic_vector(31 downto 0):= x"ffffffff";
+      --C_AXIBAR_1                        : std_logic_vector(31 downto 0):= x"ffffffff";
+      --C_AXIBAR_HIGHADDR_0               : std_logic_vector(31 downto 0):= x"00000000";
+      --C_AXIBAR_HIGHADDR_1               : std_logic_vector(31 downto 0):= x"00000000";
+      --C_AXIBAR2PCIBAR_0                 : std_logic_vector(31 downto 0):= x"12340000";
+      --C_AXIBAR2PCIBAR_1                 : std_logic_vector(31 downto 0):= x"56780000";
       C_S_AXI_CTL_ADDR_WIDTH            : integer := 32;
       C_S_AXI_CTL_DATA_WIDTH            : integer := 32
      );
@@ -201,66 +203,72 @@ entity axi_pci is
       m_axi_bready           : out std_logic                          ;-- AXI4
       m_axi_bvalid           : in  std_logic                          ;-- AXI4
       m_axi_bresp            : in  std_logic_vector(1 downto 0)       ;-- AXI4
+      
+      S_AXIS_ACLK            : in std_logic;
+      S_AXIS_ARESETN         : in std_logic;
+      S_AXIS_TDATA           : in std_logic_vector(31 downto 0);
+      S_AXIS_TVALID          : in std_logic;
+      S_AXIS_TREADY          : out std_logic
     
---  -- axi write address channel signals
-      s_axi_awid          : in  std_logic_vector((c_s_axi_id_width-1) downto 0);
-      s_axi_awaddr        : in  std_logic_vector((c_s_axi_addr_width-1) downto 0);
-      s_axi_awlen         : in  std_logic_vector(7 downto 0);
-      s_axi_awsize        : in  std_logic_vector(2 downto 0);
-      s_axi_awburst       : in  std_logic_vector(1 downto 0);
-      s_axi_awlock        : in  std_logic;
-      s_axi_awcache       : in  std_logic_vector(3 downto 0);
-      s_axi_awprot        : in  std_logic_vector(2 downto 0);
-      s_axi_awvalid       : in  std_logic;
-      s_axi_awready       : out std_logic;
---  -- axi write channel signals
-      s_axi_wdata         : in  std_logic_vector((c_s_axi_data_width-1) downto 0);
-      s_axi_wstrb         : in  std_logic_vector(((c_s_axi_data_width/8)-1) downto 0);
-      s_axi_wlast         : in  std_logic;
-      s_axi_wvalid        : in  std_logic;
-      s_axi_wready        : out std_logic;
---  -- axi write response channel signals
-      s_axi_bid           : out std_logic_vector((c_s_axi_id_width-1) downto 0);
-      s_axi_bresp         : out std_logic_vector(1 downto 0);
-      s_axi_bvalid        : out std_logic;
-      s_axi_bready        : in  std_logic;
---  -- axi read address channel signals
-      s_axi_arid          : in  std_logic_vector((c_s_axi_id_width-1) downto 0);
-      s_axi_araddr        : in  std_logic_vector((C_S_AXI_ADDR_WIDTH-1) downto 0);
-      s_axi_arlen         : in  std_logic_vector(7 downto 0);
-      s_axi_arsize        : in  std_logic_vector(2 downto 0);
-      s_axi_arburst       : in  std_logic_vector(1 downto 0);
-      s_axi_arlock        : in  std_logic;
-      s_axi_arcache       : in  std_logic_vector(3 downto 0);
-      s_axi_arprot        : in  std_logic_vector(2 downto 0);
-      s_axi_arvalid       : in  std_logic;
-      s_axi_arready       : out std_logic;
---  -- axi read data channel Signals
-      s_axi_rid           : out std_logic_vector((C_S_AXI_ID_WIDTH-1) downto 0);
-      s_axi_rdata         : out std_logic_vector((C_S_AXI_DATA_WIDTH-1) downto 0);
-      s_axi_rresp         : out std_logic_vector(1 downto 0);
-      s_axi_rlast         : out std_logic;
-      s_axi_rvalid        : out std_logic;
-      s_axi_rready        : in  std_logic
+----  -- axi write address channel signals
+--      s_axi_awid          : in  std_logic_vector((c_s_axi_id_width-1) downto 0);
+--      s_axi_awaddr        : in  std_logic_vector((c_s_axi_addr_width-1) downto 0);
+--      s_axi_awlen         : in  std_logic_vector(7 downto 0);
+--      s_axi_awsize        : in  std_logic_vector(2 downto 0);
+--      s_axi_awburst       : in  std_logic_vector(1 downto 0);
+--      s_axi_awlock        : in  std_logic;
+--      s_axi_awcache       : in  std_logic_vector(3 downto 0);
+--      s_axi_awprot        : in  std_logic_vector(2 downto 0);
+--      s_axi_awvalid       : in  std_logic;
+--      s_axi_awready       : out std_logic;
+----  -- axi write channel signals
+--      s_axi_wdata         : in  std_logic_vector((c_s_axi_data_width-1) downto 0);
+--      s_axi_wstrb         : in  std_logic_vector(((c_s_axi_data_width/8)-1) downto 0);
+--      s_axi_wlast         : in  std_logic;
+--      s_axi_wvalid        : in  std_logic;
+--      s_axi_wready        : out std_logic;
+----  -- axi write response channel signals
+--      s_axi_bid           : out std_logic_vector((c_s_axi_id_width-1) downto 0);
+--      s_axi_bresp         : out std_logic_vector(1 downto 0);
+--      s_axi_bvalid        : out std_logic;
+--      s_axi_bready        : in  std_logic;
+----  -- axi read address channel signals
+--      s_axi_arid          : in  std_logic_vector((c_s_axi_id_width-1) downto 0);
+--      s_axi_araddr        : in  std_logic_vector((C_S_AXI_ADDR_WIDTH-1) downto 0);
+--      s_axi_arlen         : in  std_logic_vector(7 downto 0);
+--      s_axi_arsize        : in  std_logic_vector(2 downto 0);
+--      s_axi_arburst       : in  std_logic_vector(1 downto 0);
+--      s_axi_arlock        : in  std_logic;
+--      s_axi_arcache       : in  std_logic_vector(3 downto 0);
+--      s_axi_arprot        : in  std_logic_vector(2 downto 0);
+--      s_axi_arvalid       : in  std_logic;
+--      s_axi_arready       : out std_logic;
+----  -- axi read data channel Signals
+--      s_axi_rid           : out std_logic_vector((C_S_AXI_ID_WIDTH-1) downto 0);
+--      s_axi_rdata         : out std_logic_vector((C_S_AXI_DATA_WIDTH-1) downto 0);
+--      s_axi_rresp         : out std_logic_vector(1 downto 0);
+--      s_axi_rlast         : out std_logic;
+--      s_axi_rvalid        : out std_logic;
+--      s_axi_rready        : in  std_logic
     );
 end axi_pci;
 
 architecture Behavioral of axi_pci is
           
-    constant C_ARD_ADDR_RANGE_ARRAY : SLV64_ARRAY_TYPE :=
-       (
-         X"0000_0000" & C_AXIBAR_0, -- IP user0 base address
-         X"0000_0000" & C_AXIBAR_HIGHADDR_0, -- IP user0 high address
-
-         X"0000_0000" & C_AXIBAR_1, -- IP user0 base address
-         X"0000_0000" & C_AXIBAR_HIGHADDR_1 -- IP user0 high address
-
-     );
-    constant C_ARD_NUM_CE_ARRAY     : INTEGER_ARRAY_TYPE :=
-        (
-          1,         -- User0 CE Number -- only 1 is supported per addr range
-          1          -- User1 CE Number -- only 1 is supported per addr range
-        );
+--    constant C_ARD_ADDR_RANGE_ARRAY : SLV64_ARRAY_TYPE :=
+--       (
+--         X"0000_0000" & C_AXIBAR_0, -- IP user0 base address
+--         X"0000_0000" & C_AXIBAR_HIGHADDR_0, -- IP user0 high address
+--
+--         X"0000_0000" & C_AXIBAR_1, -- IP user0 base address
+--         X"0000_0000" & C_AXIBAR_HIGHADDR_1 -- IP user0 high address
+--
+--     );
+--    constant C_ARD_NUM_CE_ARRAY     : INTEGER_ARRAY_TYPE :=
+--        (
+--          1,         -- User0 CE Number -- only 1 is supported per addr range
+--          1          -- User1 CE Number -- only 1 is supported per addr range
+--        );
     signal gnd                      : std_logic:= '0';
     signal vcc                      : std_logic:= '1';
     signal pci_lc_clk_out           : std_logic;
@@ -303,8 +311,10 @@ architecture Behavioral of axi_pci is
     signal ITR_REQUESTHOLD          : std_logic;
     signal ITR_M_WRDN               : std_logic;
     signal axibar_control           : std_logic_vector(31 downto 0);
-    signal axibar2pcibar0           : std_logic_vector(31 downto 0);
-    signal axibar2pcibar1           : std_logic_vector(31 downto 0);
+    signal intr_axibar_control      : std_logic_vector(31 downto 0);
+    signal pci_address_out          : std_logic_vector(31 downto 0);
+    signal pci_address_wr_en        : std_logic;
+    signal pci_address_in           : std_logic_vector(31 downto 0);
     signal pci_lc_dr_bus            : std_logic;
     signal pci_lc_time_out          : std_logic;
     signal pci_lc_m_src_en          : std_logic;
@@ -515,56 +525,63 @@ target_interface_inst :  entity axi_pci_v1_00_a.target_interface
 initiator_inst : entity axi_pci_v1_00_a.initiator_interface
   generic map(
     C_FAMILY                        => C_FAMILY,
+    C_FIFO_DEPTH                    => C_FIFO_DEPTH,
+    C_SYNC_STAGES                   => C_SYNC_STAGES
 ----AXI Parameters  
-    C_S_AXI_SUPPORTS_WRITE          => 1,
-    C_S_AXI_SUPPORTS_READ           => 1,
-    C_S_AXI_ADDR_WIDTH              => C_S_AXI_ADDR_WIDTH,
-    C_S_AXI_DATA_WIDTH              => C_S_AXI_DATA_WIDTH,
-    C_S_AXI_ID_WIDTH                => C_S_AXI_ID_WIDTH,
-    C_AXIBAR_0                      => C_AXIBAR_0,
-    C_AXIBAR_1                      => C_AXIBAR_1,
-    C_AXIBAR_HIGHADDR_0             => C_AXIBAR_HIGHADDR_0,
-    C_AXIBAR_HIGHADDR_1             => C_AXIBAR_HIGHADDR_1
+--    C_S_AXI_SUPPORTS_WRITE          => 1,
+--    C_S_AXI_SUPPORTS_READ           => 1,
+--    C_S_AXI_ADDR_WIDTH              => C_S_AXI_ADDR_WIDTH,
+--    C_S_AXI_DATA_WIDTH              => C_S_AXI_DATA_WIDTH,
+--    C_S_AXI_ID_WIDTH                => C_S_AXI_ID_WIDTH,
+--    C_AXIBAR_0                      => C_AXIBAR_0,
+--    C_AXIBAR_1                      => C_AXIBAR_1,
+--    C_AXIBAR_HIGHADDR_0             => C_AXIBAR_HIGHADDR_0,
+--    C_AXIBAR_HIGHADDR_1             => C_AXIBAR_HIGHADDR_1
     )
   Port map(
      --   -- AXI Global System Signals
-    s_axi_aclk          => axi_aclk   ,
-    s_axi_aresetn       => axi_aresetn,
-    s_axi_awid          => s_axi_awid   ,
-    s_axi_awaddr        => s_axi_awaddr ,
-    s_axi_awlen         => s_axi_awlen  ,
-    s_axi_awsize        => s_axi_awsize ,
-    s_axi_awburst       => s_axi_awburst,
-    s_axi_awlock        => s_axi_awlock ,
-    s_axi_awcache       => s_axi_awcache,
-    s_axi_awprot        => s_axi_awprot ,
-    s_axi_awvalid       => s_axi_awvalid,
-    s_axi_awready       => s_axi_awready,
-    s_axi_wdata         => s_axi_wdata  ,
-    s_axi_wstrb         => s_axi_wstrb  ,
-    s_axi_wlast         => s_axi_wlast  ,
-    s_axi_wvalid        => s_axi_wvalid ,
-    s_axi_wready        => s_axi_wready ,
-    s_axi_bid           => s_axi_bid    ,
-    s_axi_bresp         => s_axi_bresp  ,
-    s_axi_bvalid        => s_axi_bvalid ,
-    s_axi_bready        => s_axi_bready ,
-    s_axi_arid          => s_axi_arid   ,
-    s_axi_araddr        => s_axi_araddr ,
-    s_axi_arlen         => s_axi_arlen  ,
-    s_axi_arsize        => s_axi_arsize ,
-    s_axi_arburst       => s_axi_arburst,
-    s_axi_arlock        => s_axi_arlock ,
-    s_axi_arcache       => s_axi_arcache,
-    s_axi_arprot        => s_axi_arprot ,
-    s_axi_arvalid       => s_axi_arvalid,
-    s_axi_arready       => s_axi_arready,
-    s_axi_rid           => s_axi_rid    ,
-    s_axi_rdata         => s_axi_rdata  ,
-    s_axi_rresp         => s_axi_rresp  ,
-    s_axi_rlast         => s_axi_rlast  ,
-    s_axi_rvalid        => s_axi_rvalid ,
-    s_axi_rready        => s_axi_rready ,
+--    s_axi_aclk          => axi_aclk   ,
+--    s_axi_aresetn       => axi_aresetn,
+--    s_axi_awid          => s_axi_awid   ,
+--    s_axi_awaddr        => s_axi_awaddr ,
+--    s_axi_awlen         => s_axi_awlen  ,
+--    s_axi_awsize        => s_axi_awsize ,
+--    s_axi_awburst       => s_axi_awburst,
+--    s_axi_awlock        => s_axi_awlock ,
+--    s_axi_awcache       => s_axi_awcache,
+--    s_axi_awprot        => s_axi_awprot ,
+--    s_axi_awvalid       => s_axi_awvalid,
+--    s_axi_awready       => s_axi_awready,
+--    s_axi_wdata         => s_axi_wdata  ,
+--    s_axi_wstrb         => s_axi_wstrb  ,
+--    s_axi_wlast         => s_axi_wlast  ,
+--    s_axi_wvalid        => s_axi_wvalid ,
+--    s_axi_wready        => s_axi_wready ,
+--    s_axi_bid           => s_axi_bid    ,
+--    s_axi_bresp         => s_axi_bresp  ,
+--    s_axi_bvalid        => s_axi_bvalid ,
+--    s_axi_bready        => s_axi_bready ,
+--    s_axi_arid          => s_axi_arid   ,
+--    s_axi_araddr        => s_axi_araddr ,
+--    s_axi_arlen         => s_axi_arlen  ,
+--    s_axi_arsize        => s_axi_arsize ,
+--    s_axi_arburst       => s_axi_arburst,
+--    s_axi_arlock        => s_axi_arlock ,
+--    s_axi_arcache       => s_axi_arcache,
+--    s_axi_arprot        => s_axi_arprot ,
+--    s_axi_arvalid       => s_axi_arvalid,
+--    s_axi_arready       => s_axi_arready,
+--    s_axi_rid           => s_axi_rid    ,
+--    s_axi_rdata         => s_axi_rdata  ,
+--    s_axi_rresp         => s_axi_rresp  ,
+--    s_axi_rlast         => s_axi_rlast  ,
+--    s_axi_rvalid        => s_axi_rvalid ,
+--    s_axi_rready        => s_axi_rready ,
+    S_AXIS_ACLK         => S_AXIS_ACLK   ,
+    S_AXIS_ARESETN      => S_AXIS_ARESETN,
+    S_AXIS_TDATA        => S_AXIS_TDATA  ,
+    S_AXIS_TVALID       => S_AXIS_TVALID ,
+    S_AXIS_TREADY       => S_AXIS_TREADY ,
     
     clk_pci             => pci_lc_clk_out,
     rst_pci             => pci_lc_rst_out,
@@ -586,10 +603,14 @@ initiator_inst : entity axi_pci_v1_00_a.initiator_interface
     itr_m_data          => pci_lc_m_data,
     
     INITIATOR_BUSY      => INITIATOR_BUSY,
+    axibar_control_out  => intr_axibar_control,
     
-    axibar_control      => axibar_control,
-    axibar2pcibar0      => axibar2pcibar0,
-    axibar2pcibar1      => axibar2pcibar1
+    axi_cntrl_clk       => s_axi_ctl_aclk,
+    
+    axibar_control_in   => axibar_control,
+    pci_address_out     => pci_address_in ,
+    pci_address_wr_en   => pci_address_wr_en,
+    pci_address_in      => pci_address_out
     
     );
 
@@ -599,32 +620,34 @@ control_block_inst:    entity axi_pci_v1_00_a.control_block
     generic map (
       C_S_AXI_CTL_ADDR_WIDTH => C_S_AXI_CTL_ADDR_WIDTH,
       C_S_AXI_CTL_DATA_WIDTH => C_S_AXI_CTL_DATA_WIDTH,
-      C_AXIBAR2PCIBAR_0 => C_AXIBAR2PCIBAR_0,
-      C_AXIBAR2PCIBAR_1 => C_AXIBAR2PCIBAR_1
+      C_AXIBAR2PCIBAR_0 => (others => '0'),
+      C_AXIBAR2PCIBAR_1 => (others => '0')
     )
     port map(
-      s_axi_ctl_aclk    => s_axi_ctl_aclk,
-      s_axi_ctl_aresetn  => s_axi_ctl_aresetn  ,
-      s_axi_ctl_arready => s_axi_ctl_arready ,
-      s_axi_ctl_arvalid => s_axi_ctl_arvalid ,
-      s_axi_ctl_araddr  => s_axi_ctl_araddr  ,
-      s_axi_ctl_rready  => s_axi_ctl_rready  ,
-      s_axi_ctl_rvalid  => s_axi_ctl_rvalid  ,
-      s_axi_ctl_rdata   => s_axi_ctl_rdata   ,
-      s_axi_ctl_rresp   => s_axi_ctl_rresp   ,
-      s_axi_ctl_awready => s_axi_ctl_awready ,
-      s_axi_ctl_awvalid => s_axi_ctl_awvalid ,
-      s_axi_ctl_awaddr  => s_axi_ctl_awaddr  ,
-      s_axi_ctl_wready  => s_axi_ctl_wready  ,
-      s_axi_ctl_wvalid  => s_axi_ctl_wvalid  ,
-      s_axi_ctl_wdata   => s_axi_ctl_wdata   ,
-      s_axi_ctl_wstrb   => s_axi_ctl_wstrb   ,
-      s_axi_ctl_bready  => s_axi_ctl_bready  ,
-      s_axi_ctl_bvalid  => s_axi_ctl_bvalid  ,
-      s_axi_ctl_bresp   => s_axi_ctl_bresp   ,
-      axibar_control_out  => axibar_control,
-      axibar2pcibar0_out  => axibar2pcibar0,
-      axibar2pcibar1_out  => axibar2pcibar1
+      s_axi_ctl_aclk        => s_axi_ctl_aclk,
+      s_axi_ctl_aresetn     => s_axi_ctl_aresetn  ,
+      s_axi_ctl_arready     => s_axi_ctl_arready ,
+      s_axi_ctl_arvalid     => s_axi_ctl_arvalid ,
+      s_axi_ctl_araddr      => s_axi_ctl_araddr  ,
+      s_axi_ctl_rready      => s_axi_ctl_rready  ,
+      s_axi_ctl_rvalid      => s_axi_ctl_rvalid  ,
+      s_axi_ctl_rdata       => s_axi_ctl_rdata   ,
+      s_axi_ctl_rresp       => s_axi_ctl_rresp   ,
+      s_axi_ctl_awready     => s_axi_ctl_awready ,
+      s_axi_ctl_awvalid     => s_axi_ctl_awvalid ,
+      s_axi_ctl_awaddr      => s_axi_ctl_awaddr  ,
+      s_axi_ctl_wready      => s_axi_ctl_wready  ,
+      s_axi_ctl_wvalid      => s_axi_ctl_wvalid  ,
+      s_axi_ctl_wdata       => s_axi_ctl_wdata   ,
+      s_axi_ctl_wstrb       => s_axi_ctl_wstrb   ,
+      s_axi_ctl_bready      => s_axi_ctl_bready  ,
+      s_axi_ctl_bvalid      => s_axi_ctl_bvalid  ,
+      s_axi_ctl_bresp       => s_axi_ctl_bresp   ,
+      axibar_control_out    => axibar_control,
+      axibar_control_in     => intr_axibar_control,
+      pci_address_out       => pci_address_out,
+      pci_address_wr_en     => pci_address_wr_en,
+      pci_address_in        => pci_address_in   
     );
   ----------------------------------------------------------------------
   -- Instantiate registers to drive unused core inputs                --

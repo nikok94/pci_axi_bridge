@@ -3,6 +3,7 @@ lib axi_pci_v1_00_a_proc_common_v3_00_a   all
 
 lib axi_pci_v1_00_a address_decode.vhd                  
 lib axi_pci_v1_00_a addr_gen.vhd                        
+lib axi_pci_v1_00_a async_fifo.vhd                    
 lib axi_pci_v1_00_a async_fifo32.vhd                    
 lib axi_pci_v1_00_a axi_ipif.v                          verilog
 lib axi_pci_v1_00_a axi_master_burst.vhd
@@ -41,4 +42,6 @@ lib axi_pci_v1_00_a target_interface.vhd
 lib axi_pci_v1_00_a ToggleSynchronizer.vhd
 lib axi_pci_v1_00_a fifo_generator_v9_3.vhd
 lib axi_pci_v1_00_a a_fifo_stream.vhd
+lib axi_pci_v1_00_a stream_fifo_s.vhd
+
 

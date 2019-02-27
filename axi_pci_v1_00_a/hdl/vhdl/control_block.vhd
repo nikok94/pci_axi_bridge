@@ -63,8 +63,10 @@ entity control_block is
       s_axi_ctl_rready              : in std_logic ;
         
       axibar_control_out            : out std_logic_vector(31 downto 0);
-      axibar2pcibar0_out            : out std_logic_vector(31 downto 0);
-      axibar2pcibar1_out            : out std_logic_vector(31 downto 0)
+      axibar_control_in             : in std_logic_vector(31 downto 0);
+      pci_address_out               : out std_logic_vector(31 downto 0);
+      pci_address_wr_en             : out std_logic;
+      pci_address_in                : in std_logic_vector(31 downto 0)
     );
 end control_block;
 
@@ -80,8 +82,7 @@ architecture Behavioral of control_block is
     signal up_rdata                   : std_logic_vector(31 downto 0);             
     signal up_rack                    : std_logic;
     signal pci_bar_control_reg        : std_logic_vector(31 downto 0):= (others => '0');
-    signal axibar2pcibar_0            : std_logic_vector(31 downto 0):= C_AXIBAR2PCIBAR_0;
-    signal axibar2pcibar_1            : std_logic_vector(31 downto 0):= C_AXIBAR2PCIBAR_1;
+    signal pci_bar_addr               : std_logic_vector(31 downto 0):= C_AXIBAR2PCIBAR_0;
     signal wr_addr                    : std_logic_vector(7 downto 0);
     signal rd_addr                    : std_logic_vector(7 downto 0);
 
@@ -91,8 +92,7 @@ rer_out_proc : process( s_axi_ctl_aclk)
     begin
       if rising_edge( s_axi_ctl_aclk) then
           axibar_control_out <= pci_bar_control_reg;
-          axibar2pcibar0_out <= axibar2pcibar_0;
-          axibar2pcibar1_out <= axibar2pcibar_1;
+          pci_address_out    <= pci_bar_addr;
       end if;
     end process;
 
@@ -104,23 +104,24 @@ up_write_proc   : process ( s_axi_ctl_aclk, s_axi_ctl_aresetn, up_wreq, wr_addr)
       if rising_edge( s_axi_ctl_aclk) then
         if ( s_axi_ctl_aresetn = '0') then
           up_wack <= '0';
+          pci_address_wr_en <= '0';
           pci_bar_control_reg <= (others => '0');
-          axibar2pcibar_0 <= (others => '0');
-          axibar2pcibar_1 <= (others => '0');
+          pci_bar_addr <= (others => '0');
         elsif up_wreq = '1' then
+          pci_bar_control_reg <= axibar_control_in;
           case wr_addr is
             when x"01" =>
               up_wack <= '1';
               pci_bar_control_reg <= up_wdata;
             when x"02" =>
               up_wack <= '1';
-              axibar2pcibar_0 <= up_wdata;
-            when x"03" => 
-              up_wack <= '1';
-              axibar2pcibar_1 <= up_wdata;
+              pci_bar_addr <= up_wdata;
+              pci_address_wr_en <= '1';
             when others =>
               up_wack <= '0';
           end case;
+        else 
+          pci_address_wr_en <= '0';
         end if;
       end if;
     end process;
@@ -138,13 +139,10 @@ up_read_proc    : process( s_axi_ctl_aclk, s_axi_ctl_aresetn, up_rreq, rd_addr)
               up_rdata<= id_register;
             when x"01" =>
               up_rack <= '1';
-              up_rdata<= pci_bar_control_reg;
+              up_rdata<= axibar_control_in;
             when x"02" =>
               up_rack <= '1';
-              up_rdata<= axibar2pcibar_0;
-            when x"03" =>
-              up_rack <= '1';
-              up_rdata<= axibar2pcibar_1;
+              up_rdata<= pci_address_in;
             when others =>
               up_rack <= '0';
           end case;

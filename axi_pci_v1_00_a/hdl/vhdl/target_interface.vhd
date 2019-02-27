@@ -240,13 +240,10 @@ architecture Behavioral of target_interface is
     signal fifo_Empty_d             : std_logic;
     signal fifo_Almost_full         : std_logic;  
     signal fifo_Almost_empty        : std_logic;  
-    signal fifo_Wr_count            : std_logic_vector(8-1 downto 0);
-    signal fifo_Rd_count            : std_logic_vector(8-1 downto 0);
     signal fifo_wr_en               : std_logic;
     signal push_wr_data_pkt         : std_logic;
     signal push_wr_data_pkt_reg     : std_logic;
     signal fifo_rd_en               : std_logic;
-    signal fifo_wr_ack              : std_logic;
     signal fifo_valid               : std_logic;
     signal fifo_valid_n             : std_logic;
     signal bus2ip_mstwr_dst_n       : std_logic;
@@ -488,7 +485,6 @@ fifo_inst : entity work.async_fifo32
 
     wr_clk      => CLK_PCI,
     din         => fifo_Din,
-    wr_ack      => fifo_wr_ack,
     wr_en       => fifo_wr_en,
     full        => fifo_Full,
     almost_full => fifo_Almost_full,
@@ -497,9 +493,7 @@ fifo_inst : entity work.async_fifo32
     dout        => fifo_Dout,
     empty       => fifo_Empty,
     almost_empty => fifo_Almost_empty,
-    valid         => fifo_valid,
-    rd_data_count => fifo_rd_count    ,
-    wr_data_count => fifo_Wr_count
+    valid         => fifo_valid
   );
 
   fifo_wr_en <= bar_x_wr and TR_S_DATA_VLD and (not fifo_Full);
